@@ -1,17 +1,15 @@
 name: sv955_flutter_webrtc
 description: "WebRtc connection implementation for Flutter"
-version: 1.0.0
+version: 2.0.13
 homepage: https://github.com/sv955/flutter_webrtc
 
 environment:
-  sdk: ^3.6.0
-  flutter: ">=1.17.0"
+  sdk: '>=3.3.4 <4.0.0'
 
 dependencies:
-  permission_handler: ^11.3.1
-  flutter_webrtc: ^0.10.3
+  permission_handler: 10.2.0
+  flutter_webrtc: ^0.11.6+hotfix.1
   event_bus: ^2.0.1
-  uuid: ^4.5.1
   flutter:
     sdk: flutter
 

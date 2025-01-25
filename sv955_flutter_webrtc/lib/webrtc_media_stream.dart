@@ -18,6 +18,14 @@ class WebrtcMediaStream {
 
   Future<void> initLocalCameraStream() async {
     try {
+      if (getLocalCameraStream != null) {
+        webRtcLogs.fire(WebRtcLoggerEvent(
+            loggerType: LoggerType.trace,
+            message: 'Local camera stream is already initialized.',
+            className: runtimeType));
+        return;
+      }
+
       var hasCameraPermission = await _hasCameraPermission();
       if (!hasCameraPermission) {
         return;
@@ -29,6 +37,11 @@ class WebrtcMediaStream {
       }
 
       await _initLocalCameraStream();
+
+      webRtcLogs.fire(WebRtcLoggerEvent(
+          loggerType: LoggerType.trace,
+          message: 'Camera and microphone permissions are granted',
+          className: runtimeType));
     } catch (e) {
       webRtcLogs.fire(WebRtcLoggerEvent(
           loggerType: LoggerType.exception,

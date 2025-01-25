@@ -9,6 +9,7 @@ enum WebRtcSendingEventType {
   informThatConnectonIsEstablished,
   informThatRemotePeerVideoRecieved,
   informServerToTerminateCurrentSession,
+  informThatConnectionIsTerminatedAndVideoIsStopped,
 }
 
 enum WebRtcHandlingEventType {
@@ -16,7 +17,7 @@ enum WebRtcHandlingEventType {
   handleCallerOffer,
   handleCalleeAnswer,
   handleIceCandidate,
-  handleWebRtcConnectionTerminationRequest,
+  handleWebRtcConnectionTerminationResponse,
 }
 
 class WebRtcSendingEvent {

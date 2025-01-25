@@ -5,7 +5,6 @@ import 'webrtc_events/webrtc_events_bus.dart';
 import 'webrtc_events/webrtc_logger_events_bus.dart';
 import 'webrtc_ice_configuration.dart';
 import 'webrtc_media_stream.dart';
-import 'webrtc_session_id.dart';
 
 class WebRtcService {
   late WebrtcMediaStream _webrtcMediaStream;
@@ -18,6 +17,8 @@ class WebRtcService {
 
   final List<Map<String, dynamic>> _iceCandidateCollection = [];
 
+  String get getSessionId => _sessionId;
+
   WebRtcService() {
     _webRtcHadlingEventSubscription =
         webRtcEvents.on<WebRtcHadlingEvent>().listen((event) {
@@ -29,13 +30,13 @@ class WebRtcService {
           _createAnswer(event.eventData, event.sessionId!);
           break;
         case WebRtcHandlingEventType.handleCalleeAnswer:
-          _handleCalleeAnswer(event.eventData);
+          _handleCalleeAnswer(event.eventData, event.sessionId!);
           break;
         case WebRtcHandlingEventType.handleIceCandidate:
           _setRemotePeerIceCandidate(event.eventData);
           break;
-        case WebRtcHandlingEventType.handleWebRtcConnectionTerminationRequest:
-          _handlingCurrentSessionTerminationRequest();
+        case WebRtcHandlingEventType.handleWebRtcConnectionTerminationResponse:
+          _handlingCurrentSessionTerminationResponse();
           break;
       }
     });
@@ -54,6 +55,12 @@ class WebRtcService {
           className: runtimeType));
       return;
     }
+
+    webRtcLogs.fire(WebRtcLoggerEvent(
+        loggerType: LoggerType.trace,
+        message: 'Creating peer connection instance',
+        className: runtimeType));
+
     _peerConnection =
         await createPeerConnection(WebRtcIceConfiguration.getConfig);
   }
@@ -61,6 +68,12 @@ class WebRtcService {
   //Create offer
   Future _createOffer() async {
     try {
+      webRtcLogs.fire(WebRtcLoggerEvent(
+          loggerType: LoggerType.info,
+          message:
+              "WebRtcHandlingEventType.handleRequestToCreateOffer is fired hence invoked _createOffer",
+          className: runtimeType));
+
       if (!_webrtcMediaStream.isLocalCameraStreamInitialized) {
         webRtcLogs.fire(WebRtcLoggerEvent(
             loggerType: LoggerType.error,
@@ -93,18 +106,15 @@ class WebRtcService {
       var peerOffer = await _peerConnection!.createOffer();
       await _peerConnection!.setLocalDescription(peerOffer);
 
-      _sessionId = WebRtcSessionId().generate();
-
       webRtcLogs.fire(WebRtcLoggerEvent(
           loggerType: LoggerType.trace,
-          message:
-              "I'm caller and created an offer with session id: $_sessionId",
+          message: "I'm caller and created an offer.",
           className: runtimeType));
 
       webRtcEvents.fire(WebRtcSendingEvent(
           eventType: WebRtcSendingEventType.informThatOfferCreated,
           eventData: peerOffer.sdp!,
-          sessionId: _sessionId));
+          sessionId: ''));
 
       _isCaller = true;
       _informedServerAboutConnectionIsEstablished = false;
@@ -119,6 +129,12 @@ class WebRtcService {
   //Create Answer
   Future<void> _createAnswer(String offerSdp, String sessionId) async {
     try {
+      webRtcLogs.fire(WebRtcLoggerEvent(
+          loggerType: LoggerType.info,
+          message:
+              "WebRtcHandlingEventType.handleCallerOffer is fired hence invoked _createAnswer",
+          className: runtimeType));
+
       if (!_webrtcMediaStream.isLocalCameraStreamInitialized) {
         webRtcLogs.fire(WebRtcLoggerEvent(
             loggerType: LoggerType.error,
@@ -126,6 +142,13 @@ class WebRtcService {
             className: runtimeType));
         return;
       }
+
+      webRtcLogs.fire(WebRtcLoggerEvent(
+          loggerType: LoggerType.info,
+          message: 'Session id: $sessionId',
+          className: runtimeType));
+
+      _sessionId = sessionId;
 
       webRtcLogs.fire(WebRtcLoggerEvent(
           loggerType: LoggerType.info,
@@ -179,8 +202,6 @@ class WebRtcService {
       var answerSdp = await _peerConnection!.createAnswer();
       await _peerConnection!.setLocalDescription(answerSdp);
 
-      _sessionId = sessionId;
-
       webRtcLogs.fire(WebRtcLoggerEvent(
           loggerType: LoggerType.trace,
           message:
@@ -203,62 +224,95 @@ class WebRtcService {
   }
 
   //Handle callee answer
-  Future<void> _handleCalleeAnswer(String answerSdp) async {
-    const sdpType = "answer";
-    var remoteSessionDescripton = RTCSessionDescription(answerSdp, sdpType);
-    await _peerConnection!.setRemoteDescription(remoteSessionDescripton);
+  Future<void> _handleCalleeAnswer(String answerSdp, String sessionId) async {
+    try {
+      webRtcLogs.fire(WebRtcLoggerEvent(
+          loggerType: LoggerType.info,
+          message:
+              "WebRtcHandlingEventType.handleCalleeAnswer is fired hence invoked _handleCalleeAnswer",
+          className: runtimeType));
 
-    webRtcLogs.fire(WebRtcLoggerEvent(
-        loggerType: LoggerType.trace,
-        message:
-            "I'm caller and recived callee answer for session id: $_sessionId",
-        className: runtimeType));
+      webRtcLogs.fire(WebRtcLoggerEvent(
+          loggerType: LoggerType.info,
+          message: 'Session id: $sessionId',
+          className: runtimeType));
 
-    webRtcLogs.fire(WebRtcLoggerEvent(
-        loggerType: LoggerType.info,
-        message:
-            "I'm caller and sending my ice to callee for session id: $_sessionId",
-        className: runtimeType));
+      _sessionId = sessionId;
 
-    var iceCandidateJsonString =
-        _convertIceCandidateToJsonString(_iceCandidateCollection);
+      const sdpType = "answer";
+      var remoteSessionDescripton = RTCSessionDescription(answerSdp, sdpType);
+      await _peerConnection!.setRemoteDescription(remoteSessionDescripton);
 
-    if (iceCandidateJsonString.isEmpty) {
-      return;
+      webRtcLogs.fire(WebRtcLoggerEvent(
+          loggerType: LoggerType.trace,
+          message:
+              "I'm caller and received callee answer for session id: $_sessionId",
+          className: runtimeType));
+
+      var iceCandidateJsonString =
+          _convertIceCandidateToJsonString(_iceCandidateCollection);
+
+      if (iceCandidateJsonString.isEmpty) {
+        return;
+      }
+
+      webRtcLogs.fire(WebRtcLoggerEvent(
+          loggerType: LoggerType.info,
+          message:
+              "I'm caller and sending my ice to callee for session id: $_sessionId",
+          className: runtimeType));
+
+      webRtcEvents.fire(WebRtcSendingEvent(
+          eventType: WebRtcSendingEventType.informThatIceCandidateReadyToShare,
+          eventData: iceCandidateJsonString,
+          sessionId: _sessionId));
+    } catch (e) {
+      webRtcLogs.fire(WebRtcLoggerEvent(
+          loggerType: LoggerType.exception,
+          message: e.toString(),
+          className: runtimeType));
     }
-
-    webRtcEvents.fire(WebRtcSendingEvent(
-        eventType: WebRtcSendingEventType.informThatIceCandidateReadyToShare,
-        eventData: iceCandidateJsonString,
-        sessionId: _sessionId));
   }
 
   //Handling ice candidate from remote peer
   void _setRemotePeerIceCandidate(String jsonString) {
-    final List<dynamic> decodedData = jsonDecode(jsonString) as List;
-
-    for (var cadidateObj in decodedData) {
-      var cadidate = jsonDecode(cadidateObj);
-      var can = cadidate['candidate'];
-      var sdpmid = cadidate['sdpMid'];
-      var sdpIndex = cadidate['sdpMLineIndex'];
-      var remoteIce = RTCIceCandidate(can, sdpmid, sdpIndex);
-      _peerConnection!.addCandidate(remoteIce);
-    }
-
-    if (!_informedServerAboutConnectionIsEstablished) {
-      var peerType = _isCaller ? "Caller" : "Callee";
+    try {
       webRtcLogs.fire(WebRtcLoggerEvent(
-          loggerType: LoggerType.trace,
+          loggerType: LoggerType.info,
           message:
-              "I'm $peerType and informing server that connection is established for session: $_sessionId ",
+              "WebRtcHandlingEventType.handleIceCandidate is fired hence invoked _setRemotePeerIceCandidate",
           className: runtimeType));
 
-      webRtcEvents.fire(WebRtcSendingEvent(
-          eventType: WebRtcSendingEventType.informThatConnectonIsEstablished,
-          eventData: '',
-          sessionId: _sessionId));
-      _informedServerAboutConnectionIsEstablished = true;
+      final List<dynamic> decodedData = jsonDecode(jsonString) as List;
+
+      for (var cadidateObj in decodedData) {
+        var cadidate = jsonDecode(cadidateObj);
+        var can = cadidate['candidate'];
+        var sdpmid = cadidate['sdpMid'];
+        var sdpIndex = cadidate['sdpMLineIndex'];
+        var remoteIce = RTCIceCandidate(can, sdpmid, sdpIndex);
+        _peerConnection!.addCandidate(remoteIce);
+      }
+
+      if (!_informedServerAboutConnectionIsEstablished) {
+        var peerType = _isCaller ? "Caller" : "Callee";
+        webRtcLogs.fire(WebRtcLoggerEvent(
+            loggerType: LoggerType.trace,
+            message:
+                "I'm $peerType and informing server that connection is established for session: $_sessionId ",
+            className: runtimeType));
+
+        webRtcEvents.fire(WebRtcSendingEvent(
+            eventType: WebRtcSendingEventType.informThatConnectonIsEstablished,
+            eventData: '',
+            sessionId: _sessionId));
+        _informedServerAboutConnectionIsEstablished = true;
+      }
+    } catch (e) {
+      webRtcLogs.fire(WebRtcLoggerEvent(
+          loggerType: LoggerType.exception,
+          message: e.toString(),
+          className: runtimeType));
     }
   }
 
@@ -328,14 +382,7 @@ class WebRtcService {
           await _peerConnection!.transceivers;
 
       for (var track in transceiversCollection) {
-        await track.sender.track?.stop();
         await track.stop();
-      }
-
-      List<RTCRtpSender> senderCollection = await _peerConnection!.senders;
-
-      for (var sender in senderCollection) {
-        await sender.track?.stop();
       }
 
       await _peerConnection!.close();
@@ -362,15 +409,24 @@ class WebRtcService {
     }
   }
 
-  void _handlingCurrentSessionTerminationRequest() {
+  void _handlingCurrentSessionTerminationResponse() {
     webRtcLogs.fire(WebRtcLoggerEvent(
         loggerType: LoggerType.info,
         message:
-            "Informing server to terminate sesion of callee and caller for session: $_sessionId",
+            "WebRtcHandlingEventType.handleWebRtcConnectionTerminationResponse is fired hence invoked _handlingCurrentSessionTerminationResponse",
         className: runtimeType));
 
+    webRtcLogs.fire(WebRtcLoggerEvent(
+        loggerType: LoggerType.info,
+        message:
+            "Server has terminate the current session: $_sessionId. Hence disposing video call",
+        className: runtimeType));
+
+    _resetPeerConnection();
+
     webRtcEvents.fire(WebRtcSendingEvent(
-        eventType: WebRtcSendingEventType.informServerToTerminateCurrentSession,
+        eventType: WebRtcSendingEventType
+            .informThatConnectionIsTerminatedAndVideoIsStopped,
         eventData: '',
         sessionId: _sessionId));
   }
